@@ -1,0 +1,53 @@
+WhenGivenWhenTest
+├── When the caller is unknown
+│   └── it should revert
+└── When the caller is known
+    ├── Given creating a listing
+    │   ├── When the price is 0
+    │   │   └── it should revert
+    │   ├── When the title is empty
+    │   │   └── it should revert
+    │   └── When the input is valid
+    │       └── it should succeed
+    ├── Given initiating a buy
+    │   ├── When the allowance is sufficient
+    │   │   └── it should succeed
+    │   ├── When the allowance is insufficient
+    │   │   └── it should revert
+    │   ├── When the buyer is also the seller
+    │   │   └── it should revert
+    │   └── When the listing is already purchased
+    │       └── it should revert
+    ├── Given updating the status
+    │   ├── When the caller is the seller
+    │   │   ├── When updating to shipped
+    │   │   │   └── it should succeed
+    │   │   └── When updating to received as seller
+    │   │       └── it should revert
+    │   ├── When the caller is the buyer
+    │   │   ├── When updating to received
+    │   │   │   └── it should succeed
+    │   │   └── When updating to shipped as buyer
+    │   │       └── it should revert
+    │   └── When the caller is unauthorized
+    │       └── it should revert
+    ├── Given confirming a transaction
+    │   ├── When the shipment is completed
+    │   │   └── it should succeed
+    │   └── When the shipment is not completed
+    │       └── it should revert
+    ├── Given withdrawing funds
+    │   ├── When the transaction is completed
+    │   │   └── it should succeed
+    │   └── When the transaction is incomplete
+    │       └── it should revert
+    ├── Given cancelling a listing
+    │   ├── When the listing is valid
+    │   │   └── it should succeed
+    │   └── When the listing is invalid
+    │       └── it should revert
+    └── Given fetching a listing
+        ├── When the listing exists
+        │   └── it should return the correct listing
+        └── When the listing does not exist
+            └── it should revert

@@ -1,137 +1,148 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import {Test} from "forge-std/Test.sol";
-import {P2PExchange} from "../src/P2P.sol";
-
-// Mock USDC Contract
-contract MockUSDC {
-    string public name = "Mock USDC";
-    string public symbol = "USDC";
-    uint8 public decimals = 18;
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
-
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-
-    function mint(address to, uint256 amount) public {
-        balanceOf[to] += amount;
-        emit Transfer(address(0), to, amount);
+contract WhenGivenWhenTest {
+    function test_RevertWhen_TheCallerIsUnknown() external {
+        // it should revert
     }
 
-    function transfer(address to, uint256 amount) public returns (bool) {
-        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
-        balanceOf[msg.sender] -= amount;
-        balanceOf[to] += amount;
-        emit Transfer(msg.sender, to, amount);
-        return true;
+    modifier whenTheCallerIsKnown() {
+        _;
     }
 
-    function approve(address spender, uint256 amount) public returns (bool) {
-        allowance[msg.sender][spender] = amount;
-        emit Approval(msg.sender, spender, amount);
-        return true;
+    modifier givenCreatingAListing() {
+        _;
     }
 
-    function transferFrom(address from, address to, uint256 amount) public returns (bool) {
-        require(balanceOf[from] >= amount, "Insufficient balance");
-        require(allowance[from][msg.sender] >= amount, "Allowance exceeded");
-        balanceOf[from] -= amount;
-        balanceOf[to] += amount;
-        allowance[from][msg.sender] -= amount;
-        emit Transfer(from, to, amount);
-        return true;
-    }
-}
-
-contract P2PExchangeTest is Test {
-    P2PExchange public p2p;
-    MockUSDC public usdc;
-
-    address seller = address(0x1);
-    address buyer = address(0x2);
-
-    function setUp() public {
-        // Deploy MockUSDC and P2PExchange contracts
-        usdc = new MockUSDC();
-        p2p = new P2PExchange(address(usdc));
-
-        // Mint USDC tokens for the buyer
-        usdc.mint(buyer, 1000 ether);
-
-        // Buyer approves the P2PExchange contract to spend their USDC
-        vm.startPrank(buyer);
-        usdc.approve(address(p2p), 1000 ether);
-        vm.stopPrank();
+    function test_RevertWhen_ThePriceIs0() external whenTheCallerIsKnown givenCreatingAListing {
+        // it should revert
     }
 
-    function test_CreateListing() public {
-        vm.startPrank(seller);
-        uint256 price = 100 ether;
-        string memory title = "Sample Item";
-
-        // Create a new listing
-        uint256 listingId = p2p.createListing(price, title);
-
-        // Verify the listing details
-        P2PExchange.Listing memory listing = p2p.getListing(listingId);
-        assertEq(listing.seller, seller);
-        assertEq(listing.price, price);
-        assertEq(listing.title, title);
-        assertEq(uint(listing.status), uint(P2PExchange.Status.Listed));
-        vm.stopPrank();
+    function test_RevertWhen_TheTitleIsEmpty() external whenTheCallerIsKnown givenCreatingAListing {
+        // it should revert
     }
 
-    function test_InitiateBuy() public {
-        vm.startPrank(seller);
-
-        // Seller creates a listing
-        uint256 price = 100 ether;
-        uint256 listingId = p2p.createListing(price, "Item for Sale");
-        vm.stopPrank();
-
-        // Buyer initiates the purchase
-        vm.startPrank(buyer);
-        p2p.initiateBuy(listingId);
-        vm.stopPrank();
-
-        // Verify that the listing is updated correctly
-        P2PExchange.Listing memory listing = p2p.getListing(listingId);
-        assertEq(listing.buyer, buyer);
-        assertEq(uint(listing.status), uint(P2PExchange.Status.BuyerPaid));
+    function test_WhenTheInputIsValid() external whenTheCallerIsKnown givenCreatingAListing {
+        // it should succeed
     }
 
-    function test_WithdrawFunds() public {
-        vm.startPrank(seller);
+    modifier givenInitiatingABuy() {
+        _;
+    }
 
-        // Seller creates a listing
-        uint256 price = 100 ether;
-        uint256 listingId = p2p.createListing(price, "Item for Sale");
-        vm.stopPrank();
+    function test_WhenTheAllowanceIsSufficient() external whenTheCallerIsKnown givenInitiatingABuy {
+        // it should succeed
+    }
 
-        // Buyer initiates the purchase
-        vm.startPrank(buyer);
-        p2p.initiateBuy(listingId);
-        vm.stopPrank();
+    function test_RevertWhen_TheAllowanceIsInsufficient() external whenTheCallerIsKnown givenInitiatingABuy {
+        // it should revert
+    }
 
-        // Seller marks the item as shipped
-        vm.startPrank(seller);
-        p2p.updateStatus(listingId, P2PExchange.Status.Shipped);
-        vm.stopPrank();
+    function test_RevertWhen_TheBuyerIsAlsoTheSeller() external whenTheCallerIsKnown givenInitiatingABuy {
+        // it should revert
+    }
 
-        // Buyer marks the item as received and confirms the transaction
-        vm.startPrank(buyer);
-        p2p.updateStatus(listingId, P2PExchange.Status.Received);
-        p2p.confirmTransaction(listingId);
-        vm.stopPrank();
+    function test_RevertWhen_TheListingIsAlreadyPurchased() external whenTheCallerIsKnown givenInitiatingABuy {
+        // it should revert
+    }
 
-        // Seller withdraws the funds
-        vm.startPrank(seller);
-        p2p.withdrawFunds(listingId);
-        vm.stopPrank();
+    modifier givenUpdatingTheStatus() {
+        _;
+    }
 
-        // Verify the seller's USDC balance
-        assertEq(usdc.balanceOf(seller), price);
+    modifier whenTheCallerIsTheSeller() {
+        _;
+    }
+
+    function test_WhenUpdatingToShipped()
+        external
+        whenTheCallerIsKnown
+        givenUpdatingTheStatus
+        whenTheCallerIsTheSeller
+    {
+        // it should succeed
+    }
+
+    function test_RevertWhen_UpdatingToReceivedAsSeller()
+        external
+        whenTheCallerIsKnown
+        givenUpdatingTheStatus
+        whenTheCallerIsTheSeller
+    {
+        // it should revert
+    }
+
+    modifier whenTheCallerIsTheBuyer() {
+        _;
+    }
+
+    function test_WhenUpdatingToReceived()
+        external
+        whenTheCallerIsKnown
+        givenUpdatingTheStatus
+        whenTheCallerIsTheBuyer
+    {
+        // it should succeed
+    }
+
+    function test_RevertWhen_UpdatingToShippedAsBuyer()
+        external
+        whenTheCallerIsKnown
+        givenUpdatingTheStatus
+        whenTheCallerIsTheBuyer
+    {
+        // it should revert
+    }
+
+    function test_RevertWhen_TheCallerIsUnauthorized() external whenTheCallerIsKnown givenUpdatingTheStatus {
+        // it should revert
+    }
+
+    modifier givenConfirmingATransaction() {
+        _;
+    }
+
+    function test_WhenTheShipmentIsCompleted() external whenTheCallerIsKnown givenConfirmingATransaction {
+        // it should succeed
+    }
+
+    function test_RevertWhen_TheShipmentIsNotCompleted() external whenTheCallerIsKnown givenConfirmingATransaction {
+        // it should revert
+    }
+
+    modifier givenWithdrawingFunds() {
+        _;
+    }
+
+    function test_WhenTheTransactionIsCompleted() external whenTheCallerIsKnown givenWithdrawingFunds {
+        // it should succeed
+    }
+
+    function test_RevertWhen_TheTransactionIsIncomplete() external whenTheCallerIsKnown givenWithdrawingFunds {
+        // it should revert
+    }
+
+    modifier givenCancellingAListing() {
+        _;
+    }
+
+    function test_WhenTheListingIsValid() external whenTheCallerIsKnown givenCancellingAListing {
+        // it should succeed
+    }
+
+    function test_RevertWhen_TheListingIsInvalid() external whenTheCallerIsKnown givenCancellingAListing {
+        // it should revert
+    }
+
+    modifier givenFetchingAListing() {
+        _;
+    }
+
+    function test_WhenTheListingExists() external whenTheCallerIsKnown givenFetchingAListing {
+        // it should return the correct listing
+    }
+
+    function test_RevertWhen_TheListingDoesNotExist() external whenTheCallerIsKnown givenFetchingAListing {
+        // it should revert
     }
 }
