@@ -3,47 +3,9 @@ pragma solidity ^0.8.13;
 
 import {Test} from "forge-std/Test.sol";
 import {P2PExchange} from "../src/P2P.sol";
+import {MockUSDC} from "./MockUSDC.sol";
+import "forge-std/console.sol";
 
-// Mock USDC Contract
-contract MockUSDC {
-    string public name = "Mock USDC";
-    string public symbol = "USDC";
-    uint8 public decimals = 18;
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
-
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-
-    function mint(address to, uint256 amount) public {
-        balanceOf[to] += amount;
-        emit Transfer(address(0), to, amount);
-    }
-
-    function transfer(address to, uint256 amount) public returns (bool) {
-        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
-        balanceOf[msg.sender] -= amount;
-        balanceOf[to] += amount;
-        emit Transfer(msg.sender, to, amount);
-        return true;
-    }
-
-    function approve(address spender, uint256 amount) public returns (bool) {
-        allowance[msg.sender][spender] = amount;
-        emit Approval(msg.sender, spender, amount);
-        return true;
-    }
-
-    function transferFrom(address from, address to, uint256 amount) public returns (bool) {
-        require(balanceOf[from] >= amount, "Insufficient balance");
-        require(allowance[from][msg.sender] >= amount, "Allowance exceeded");
-        balanceOf[from] -= amount;
-        balanceOf[to] += amount;
-        allowance[from][msg.sender] -= amount;
-        emit Transfer(from, to, amount);
-        return true;
-    }
-}
 
 contract P2PExchangeTest is Test {
     P2PExchange public p2p;
@@ -51,11 +13,13 @@ contract P2PExchangeTest is Test {
 
     address seller = address(0x1);
     address buyer = address(0x2);
+    address disputeHandler = address(0x3);
+    address feeAdmin = address(0x4);
 
     function setUp() public {
         // Deploy MockUSDC and P2PExchange contracts
         usdc = new MockUSDC();
-        p2p = new P2PExchange(address(usdc));
+        p2p = new P2PExchange(address(usdc), disputeHandler, feeAdmin);
 
         // Mint USDC tokens for the buyer
         usdc.mint(buyer, 1000 ether);
@@ -102,7 +66,8 @@ contract P2PExchangeTest is Test {
         assertEq(uint(listing.status), uint(P2PExchange.Status.BuyerPaid));
     }
 
-    function test_WithdrawFunds() public {
+    // maybe include a escrow first, cause this dont work
+   function test_WithdrawFunds() public {
         vm.startPrank(seller);
 
         // Seller creates a listing
@@ -120,18 +85,167 @@ contract P2PExchangeTest is Test {
         p2p.updateStatus(listingId, P2PExchange.Status.Shipped);
         vm.stopPrank();
 
-        // Buyer marks the item as received and confirms the transaction
+        // Buyer marks the item as received
         vm.startPrank(buyer);
         p2p.updateStatus(listingId, P2PExchange.Status.Received);
-        p2p.confirmTransaction(listingId);
-        vm.stopPrank();
-
-        // Seller withdraws the funds
-        vm.startPrank(seller);
-        p2p.withdrawFunds(listingId);
+        p2p.confirmReceiptAndReleaseFunds(listingId);
         vm.stopPrank();
 
         // Verify the seller's USDC balance
-        assertEq(usdc.balanceOf(seller), price);
+        uint256 fee = (price * 10) / 10_000; // 0.1% fee
+        uint256 sellerAmount = price - fee;
+        assertEq(usdc.balanceOf(seller), sellerAmount);
+
+        // Verify collected fees
+        vm.startPrank(feeAdmin);
+        assertEq(p2p.viewCollectedFee(), fee);
+        vm.stopPrank();
+    }
+
+    function test_DisputeResolution_RefundBuyer() public {
+        // Fee admin sets platform fee
+        vm.startPrank(feeAdmin);
+        p2p.setFee(100); // 1%
+        vm.stopPrank();
+
+        // Seller creates a listing
+        vm.startPrank(seller);
+        uint256 price = 100 ether;
+        uint256 listingId = p2p.createListing(price, "Item for Sale");
+        vm.stopPrank();
+
+        // Buyer initiates purchase
+        vm.startPrank(buyer);
+        p2p.initiateBuy(listingId);
+        vm.stopPrank();
+
+        // Buyer marks the listing as disputed
+        vm.startPrank(buyer);
+        p2p.markDispute(listingId);
+        vm.stopPrank();
+
+        // Dispute handler resolves in favor of the buyer
+        vm.startPrank(disputeHandler);
+
+        uint256 fee = (price * 1) / 100;
+        uint256 refundAmount = price - fee;
+
+        // Expect the `DisputeResolved` event
+        vm.expectEmit(true, true, false, true);
+        emit P2PExchange.DisputeResolved(listingId, disputeHandler, fee, true);
+
+        p2p.handleDispute(listingId, true); // Refund buyer
+        vm.stopPrank();
+
+        // Verify buyer's balance (original balance minus initial purchase + refund)
+        assertEq(usdc.balanceOf(buyer), 1000 ether - price + refundAmount);
+
+        // Verify dispute handler received the fee
+        assertEq(usdc.balanceOf(disputeHandler), fee);
+
+        // Verify collected fees in the contract
+        vm.startPrank(feeAdmin);
+        assertEq(p2p.viewCollectedFee(), fee);
+        vm.stopPrank();
+    }
+
+    function test_DisputeResolution_PaySeller() public {
+        // Fee admin sets platform fee
+        vm.startPrank(feeAdmin);
+        p2p.setFee(100); // 1%
+        vm.stopPrank();
+
+        // Seller creates a listing
+        vm.startPrank(seller);
+        uint256 price = 100 ether;
+        uint256 listingId = p2p.createListing(price, "Item for Sale");
+        vm.stopPrank();
+
+        // Buyer initiates purchase
+        vm.startPrank(buyer);
+        p2p.initiateBuy(listingId);
+        vm.stopPrank();
+
+        // Buyer marks the listing as disputed
+        vm.startPrank(buyer);
+        p2p.markDispute(listingId);
+        vm.stopPrank();
+
+        // Dispute handler resolves in favor of the seller
+        vm.startPrank(disputeHandler);
+
+        uint256 fee = (price * 1) / 100;
+        uint256 sellerAmount = price - fee;
+
+        // Expect the `DisputeResolved` event
+        vm.expectEmit(true, true, false, true);
+        emit P2PExchange.DisputeResolved(listingId, disputeHandler, fee, false);
+
+        p2p.handleDispute(listingId, false); // Pay seller
+        vm.stopPrank();
+
+        // Verify seller's balance is increased
+        assertEq(usdc.balanceOf(seller), sellerAmount);
+
+        // Verify dispute handler received the fee
+        assertEq(usdc.balanceOf(disputeHandler), fee);
+    }
+
+    function test_WithdrawPlatformFee() public {
+        // Log roles for debugging
+        console.log("Default Admin Role:");
+        console.logBytes32(p2p.DEFAULT_ADMIN_ROLE());
+
+        console.log("Fee Admin Role:");
+        console.logBytes32(p2p.FEE_ADMIN_ROLE());
+
+        console.log("Contract Deployer:");
+        console.logAddress(address(this));
+
+        console.log("Fee Admin Address:");
+        console.logAddress(feeAdmin);
+
+        console.log("Is Fee Admin Granted:");
+        console.logBool(p2p.hasRole(p2p.FEE_ADMIN_ROLE(), feeAdmin));
+        assertTrue(p2p.hasRole(p2p.FEE_ADMIN_ROLE(), feeAdmin), "Fee admin role not assigned");
+
+        // Fee admin sets the platform fee
+        vm.startPrank(feeAdmin);
+        p2p.setFee(100); // 1%
+        vm.stopPrank();
+
+        // Seller creates a listing
+        vm.startPrank(seller);
+        uint256 price = 100 ether;
+        uint256 listingId = p2p.createListing(price, "Item for Sale");
+        vm.stopPrank();
+
+        // Buyer initiates the purchase
+        vm.startPrank(buyer);
+        p2p.initiateBuy(listingId);
+        vm.stopPrank();
+
+        // Seller marks the item as shipped
+        vm.startPrank(seller);
+        p2p.updateStatus(listingId, P2PExchange.Status.Shipped);
+        vm.stopPrank();
+
+        // Buyer marks the item as received and confirms the transaction
+        vm.startPrank(buyer);
+        p2p.updateStatus(listingId, P2PExchange.Status.Received);
+        p2p.confirmReceiptAndReleaseFunds(listingId);
+        vm.stopPrank();
+
+        // Verify collected fees using feeAdmin
+        vm.startPrank(feeAdmin);
+        uint256 expectedFee = (price * 1) / 100;
+        uint256 collectedFee = p2p.viewCollectedFee();
+        assertEq(collectedFee, expectedFee);
+
+        // Fee admin withdraws the collected fee
+        p2p.withdrawFee();
+        assertEq(usdc.balanceOf(feeAdmin), expectedFee);
+        assertEq(p2p.viewCollectedFee(), 0); // Collected fees should now be 0
+        vm.stopPrank();
     }
 }
