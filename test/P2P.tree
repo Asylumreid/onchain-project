@@ -19,17 +19,33 @@ WhenGivenWhenTest
     │   └── When the listing is already purchased
     │       └── it should revert
     ├── Given updating the status
-    │   ├── When the caller is the seller
+    │   ├── When the seller updates the status
     │   │   ├── When updating to shipped
     │   │   │   └── it should succeed
     │   │   └── When updating to received as seller
     │   │       └── it should revert
-    │   ├── When the caller is the buyer
+    │   ├── When the buyer updates the status
     │   │   ├── When updating to received
     │   │   │   └── it should succeed
     │   │   └── When updating to shipped as buyer
     │   │       └── it should revert
     │   └── When the caller is unauthorized
+    │       └── it should revert
+    ├── Given marking a dispute
+    │   ├── When the caller is the buyer
+    │   │   └── it should succeed if allowed
+    │   ├── When the caller is the seller
+    │   │   └── it should succeed if allowed
+    │   └── When the status does not allow disputes
+    │       └── it should revert
+    ├── Given handling a dispute
+    │   ├── When the handler is unauthorized
+    │   │   └── it should revert
+    │   ├── When the handler resolves to refund the buyer
+    │   │   └── it should refund the buyer and transfer the fee
+    │   ├── When the handler resolves to pay the seller
+    │   │   └── it should pay the seller and transfer the fee
+    │   └── When the fee collection is insufficient
     │       └── it should revert
     ├── Given confirming a transaction
     │   ├── When the shipment is completed

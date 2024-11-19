@@ -107,12 +107,12 @@ contract P2PExchange is AccessControl {
         require(listingId < listings.length, "Listing does not exist");
         Listing storage listing = listings[listingId];
         require(listing.status == Status.Listed, "Listing not available");
-        require(msg.sender != listing.seller, "Seller cannot be the buyer");
-        require(listing.buyer == address(0), "Buyer already set");
+        require(msg.sender != listing.seller, "Seller cannot be the buyer"); // Prevent seller from purchasing their own listing
+        require(listing.buyer == address(0), "Buyer already set"); // Ensure no previous buyer has purchased
 
         require(usdcToken.transferFrom(msg.sender, address(this), listing.price), "Token transfer failed");
 
-        listing.buyer = msg.sender;
+        listing.buyer = msg.sender; // Assign the current caller as the buyer
         listing.status = Status.BuyerPaid;
         emit BuyerSet(listingId, msg.sender);
         emit StatusUpdated(listingId, Status.BuyerPaid);

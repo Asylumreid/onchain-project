@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity 0.8.0;
 
 contract WhenGivenWhenTest {
     function test_RevertWhen_TheCallerIsUnknown() external {
@@ -50,7 +50,7 @@ contract WhenGivenWhenTest {
         _;
     }
 
-    modifier whenTheCallerIsTheSeller() {
+    modifier whenTheSellerUpdatesTheStatus() {
         _;
     }
 
@@ -58,7 +58,7 @@ contract WhenGivenWhenTest {
         external
         whenTheCallerIsKnown
         givenUpdatingTheStatus
-        whenTheCallerIsTheSeller
+        whenTheSellerUpdatesTheStatus
     {
         // it should succeed
     }
@@ -67,12 +67,12 @@ contract WhenGivenWhenTest {
         external
         whenTheCallerIsKnown
         givenUpdatingTheStatus
-        whenTheCallerIsTheSeller
+        whenTheSellerUpdatesTheStatus
     {
         // it should revert
     }
 
-    modifier whenTheCallerIsTheBuyer() {
+    modifier whenTheBuyerUpdatesTheStatus() {
         _;
     }
 
@@ -80,7 +80,7 @@ contract WhenGivenWhenTest {
         external
         whenTheCallerIsKnown
         givenUpdatingTheStatus
-        whenTheCallerIsTheBuyer
+        whenTheBuyerUpdatesTheStatus
     {
         // it should succeed
     }
@@ -89,12 +89,48 @@ contract WhenGivenWhenTest {
         external
         whenTheCallerIsKnown
         givenUpdatingTheStatus
-        whenTheCallerIsTheBuyer
+        whenTheBuyerUpdatesTheStatus
     {
         // it should revert
     }
 
     function test_RevertWhen_TheCallerIsUnauthorized() external whenTheCallerIsKnown givenUpdatingTheStatus {
+        // it should revert
+    }
+
+    modifier givenMarkingADispute() {
+        _;
+    }
+
+    function test_WhenTheCallerIsTheBuyer() external whenTheCallerIsKnown givenMarkingADispute {
+        // it should succeed if allowed
+    }
+
+    function test_WhenTheCallerIsTheSeller() external whenTheCallerIsKnown givenMarkingADispute {
+        // it should succeed if allowed
+    }
+
+    function test_RevertWhen_TheStatusDoesNotAllowDisputes() external whenTheCallerIsKnown givenMarkingADispute {
+        // it should revert
+    }
+
+    modifier givenHandlingADispute() {
+        _;
+    }
+
+    function test_RevertWhen_TheHandlerIsUnauthorized() external whenTheCallerIsKnown givenHandlingADispute {
+        // it should revert
+    }
+
+    function test_WhenTheHandlerResolvesToRefundTheBuyer() external whenTheCallerIsKnown givenHandlingADispute {
+        // it should refund the buyer and transfer the fee
+    }
+
+    function test_WhenTheHandlerResolvesToPayTheSeller() external whenTheCallerIsKnown givenHandlingADispute {
+        // it should pay the seller and transfer the fee
+    }
+
+    function test_RevertWhen_TheFeeCollectionIsInsufficient() external whenTheCallerIsKnown givenHandlingADispute {
         // it should revert
     }
 

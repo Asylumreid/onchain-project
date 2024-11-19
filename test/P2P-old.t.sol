@@ -7,6 +7,8 @@ import {MockUSDC} from "./MockUSDC.sol";
 import "forge-std/console.sol";
 
 
+
+
 contract P2PExchangeTest is Test {
     P2PExchange public p2p;
     MockUSDC public usdc;
@@ -15,6 +17,7 @@ contract P2PExchangeTest is Test {
     address buyer = address(0x2);
     address disputeHandler = address(0x3);
     address feeAdmin = address(0x4);
+    error AccessControlUnauthorizedAccount(address account, bytes32 role);
 
     function setUp() public {
         // Deploy MockUSDC and P2PExchange contracts
@@ -247,5 +250,106 @@ contract P2PExchangeTest is Test {
         assertEq(usdc.balanceOf(feeAdmin), expectedFee);
         assertEq(p2p.viewCollectedFee(), 0); // Collected fees should now be 0
         vm.stopPrank();
+    }
+
+
+    // Test seller-only access control
+    function test_SellerOnlyAccess() public {
+        // Anyone can create a listing; no restrictions are applied
+        vm.startPrank(buyer);
+        uint256 listingId = p2p.createListing(100 ether, "Valid Listing");
+        P2PExchange.Listing memory listing = p2p.getListing(listingId);
+        assertEq(listing.seller, buyer); // Verify the seller is the caller
+        vm.stopPrank();
+
+        // Another address can also create a listing
+        vm.startPrank(seller);
+        listingId = p2p.createListing(200 ether, "Another Listing");
+        listing = p2p.getListing(listingId);
+        assertEq(listing.seller, seller); // Verify the seller is the caller
+        vm.stopPrank();
+    }
+
+    // Test buyer-only access control
+    function test_BuyerOnlyAccess() public {
+        // Seller creates a listing
+        vm.startPrank(seller);
+        uint256 listingId = p2p.createListing(100 ether, "Valid Listing");
+        vm.stopPrank();
+
+        // Same seller tries to buy the listing, which should fail
+        vm.startPrank(seller); // Incorrect role
+        vm.expectRevert("Seller cannot be the buyer");
+        p2p.initiateBuy(listingId);
+        vm.stopPrank();
+
+        // Another user (buyer) purchases the listing
+        vm.startPrank(buyer); // Correct role
+        p2p.initiateBuy(listingId);
+        P2PExchange.Listing memory listing = p2p.getListing(listingId);
+        assertEq(listing.buyer, buyer); // Verify the buyer is set correctly
+        assertEq(uint(listing.status), uint(P2PExchange.Status.BuyerPaid)); // Verify status is updated
+        vm.stopPrank();
+    }
+
+    function test_GetFeeAndListings() public {
+        vm.startPrank(feeAdmin);
+        p2p.setFee(100); // 1%
+        vm.stopPrank();
+
+        vm.startPrank(seller);
+        uint256 price = 100 ether;
+        uint256 listingId1 = p2p.createListing(price, "Item 1");
+        uint256 listingId2 = p2p.createListing(price, "Item 2");
+        vm.stopPrank();
+
+        uint256 fee = p2p.getFee(); // Remove the price parameter
+        assertEq(fee, 100); // Should return feeBps value (100 = 1%)
+
+        uint256 listingCount = p2p.getListingCount();
+        assertEq(listingCount, 2);
+
+        P2PExchange.Listing[] memory allListings = p2p.getAllListings();
+        assertEq(allListings.length, 2);
+        assertEq(allListings[0].title, "Item 1");
+        assertEq(allListings[1].title, "Item 2");
+    }
+
+    function test_InvalidFeeAdminWithdrawal() public {
+        // Start prank with seller (not fee admin)
+        vm.startPrank(seller);
+
+        // Expect the `AccessControlUnauthorizedAccount` error with proper parameters
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AccessControlUnauthorizedAccount.selector,
+                seller, // The address attempting the action
+                p2p.FEE_ADMIN_ROLE() // The required role
+            )
+        );
+        p2p.withdrawFee(); // Should revert with `AccessControlUnauthorizedAccount`
+        vm.stopPrank();
+    }
+
+    function test_EscrowDisputeFlow() public {
+        vm.startPrank(feeAdmin);
+        p2p.setFee(100); // 1%
+        vm.stopPrank();
+
+        vm.startPrank(seller);
+        uint256 listingId = p2p.createListing(100 ether, "Escrow Item");
+        vm.stopPrank();
+
+        vm.startPrank(buyer);
+        p2p.initiateBuy(listingId);
+        p2p.markDispute(listingId);
+        vm.stopPrank();
+
+        vm.startPrank(disputeHandler);
+        p2p.handleDispute(listingId, true); // Refund buyer
+        vm.stopPrank();
+
+        P2PExchange.Listing memory listing = p2p.getListing(listingId);
+        assertEq(uint(listing.status), uint(P2PExchange.Status.Cancelled));
     }
 }
