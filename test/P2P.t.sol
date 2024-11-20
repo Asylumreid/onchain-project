@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {Test, console} from "forge-std/Test.sol";
 import {P2PExchange} from "../src/P2P.sol";
 import {MockUSDC} from "./MockUSDC.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract WhenGivenWhenTest is Test {
     P2PExchange public p2p;
@@ -51,7 +52,42 @@ contract WhenGivenWhenTest is Test {
         p2p.setFee(100);
     }
 
-     modifier whenTheCallerIsAuthorized() {
+    modifier whenInitializingContract() {
+        vm.deal(address(this), 1 ether); // Ensure testing contract has some ETH
+        _;
+    }
+
+    function test_RevertWhen_USDCAddressIsZero() external whenInitializingContract {
+        vm.expectRevert("Invalid USDC token address");
+        new P2PExchange(address(0), disputeHandler, feeAdmin);
+    }
+
+    function test_RevertWhen_DisputeHandlerIsZero() external whenInitializingContract {
+        vm.expectRevert("Invalid dispute handler address");
+        new P2PExchange(address(usdc), address(0), feeAdmin);
+    }
+
+    function test_RevertWhen_FeeAdminIsZero() external whenInitializingContract {
+        vm.expectRevert("Invalid fee admin address");
+        new P2PExchange(address(usdc), disputeHandler, address(0));
+    }
+
+    function test_RevertWhen_DisputeHandlerEqualsFeeAdmin() external whenInitializingContract {
+        vm.expectRevert("Dispute handler and fee admin must be different");
+        new P2PExchange(address(usdc), disputeHandler, disputeHandler);
+    }
+
+    function test_RevertWhen_USDCEqualsDisputeHandler() external whenInitializingContract {
+        vm.expectRevert("USDC token and dispute handler must be different");
+        new P2PExchange(address(usdc), address(usdc), feeAdmin);
+    }
+
+    function test_RevertWhen_USDCEqualsFeeAdmin() external whenInitializingContract {
+        vm.expectRevert("USDC token and fee admin must be different");
+        new P2PExchange(address(usdc), disputeHandler, address(usdc));
+    }
+
+    modifier whenTheCallerIsAuthorized() {
         _;
     }
 
@@ -81,6 +117,16 @@ contract WhenGivenWhenTest is Test {
         string memory longTitle = new string(201);
         vm.expectRevert("Title too long");
         p2p.createListing(1 ether, longTitle);
+    }
+
+    function test_RevertWhen_TheFeeCalculationOverflows() external whenTheCallerIsAuthorized {
+        vm.startPrank(feeAdmin);
+        p2p.setFee(10001); // 100% in basis points
+        vm.stopPrank();
+
+        vm.expectRevert("Fee calculation overflow");
+        vm.prank(seller);
+        p2p.createListing(1 ether, "Test Item");
     }
 
     function test_WhenCreationParametersAreValid() external whenTheCallerIsAuthorized givenCreatingAListing {
@@ -157,12 +203,29 @@ contract WhenGivenWhenTest is Test {
         vm.expectRevert("Transaction already completed or invalid status");
         p2p.confirmTransaction(0);
     }
-    //maybe be wonky, take a look again later
+
     function test_RevertWhen_EscrowAlreadyReleased() external whenTheCallerIsAuthorized givenConfirmingATransaction {
         vm.prank(buyer);
         p2p.confirmTransaction(0);
         vm.prank(buyer);
         vm.expectRevert("Transaction already completed or invalid status");
+        p2p.confirmTransaction(0);
+    }
+
+    function test_RevertWhen_ConfirmationTransferFails()
+        external
+        whenTheCallerIsAuthorized
+        givenConfirmingATransaction
+    {
+        // Mock USDC transfer to return false
+    vm.mockCall(
+            address(usdc),
+            abi.encodeWithSelector(IERC20.transfer.selector),
+            abi.encode(false)
+        );
+        
+        vm.prank(buyer);
+        vm.expectRevert("Transfer to seller failed");
         p2p.confirmTransaction(0);
     }
 
@@ -203,6 +266,10 @@ contract WhenGivenWhenTest is Test {
         p2p.requestEscrowRelease(0);
     }
 
+    function test_RevertWhen_ReleaseTransferFails() external whenTheCallerIsAuthorized givenRequestingEscrowRelease {
+        // it should revert
+    }
+
     function test_WhenReleaseParametersValid() external whenTheCallerIsAuthorized givenRequestingEscrowRelease {
         vm.warp(block.timestamp + 8 days);
         uint256 sellerBalanceBefore = usdc.balanceOf(seller);
@@ -234,6 +301,10 @@ contract WhenGivenWhenTest is Test {
         p2p.handleDispute(0, true);
     }
 
+    function test_RevertWhen_BuyerRefundFails() external whenTheCallerIsAuthorized givenHandlingADispute {
+        // it should revert
+    }
+
     function test_WhenResolvingForBuyer() external whenTheCallerIsAuthorized givenHandlingADispute {
         uint256 buyerBalanceBefore = usdc.balanceOf(buyer);
         vm.prank(disputeHandler);
@@ -246,6 +317,147 @@ contract WhenGivenWhenTest is Test {
         vm.prank(disputeHandler);
         p2p.handleDispute(0, false);
         assertEq(usdc.balanceOf(seller), sellerBalanceBefore + 1 ether);
+    }
+
+    modifier givenManagingFees() {
+        _;
+    }
+
+    modifier whenSettingFeeRate() {
+        _;
+    }
+
+    function test_RevertWhen_SetterUnauthorized()
+        external
+        whenTheCallerIsAuthorized
+        givenManagingFees
+        whenSettingFeeRate
+    {
+        vm.prank(address(1));
+        vm.expectRevert();
+        p2p.setFee(100);
+    }
+
+    function test_WhenSetterAuthorized() external whenTheCallerIsAuthorized givenManagingFees whenSettingFeeRate {
+        vm.prank(feeAdmin);
+        p2p.setFee(250); // 2.5%
+        assertEq(p2p.getFee(), 250);
+    }
+
+    modifier whenWithdrawingCollectedFees() {
+        _;
+    }
+
+    function test_RevertWhen_WithdrawerUnauthorized()
+        external
+        whenTheCallerIsAuthorized
+        givenManagingFees
+        whenWithdrawingCollectedFees
+    {
+        vm.prank(address(1));
+        vm.expectRevert();
+        p2p.withdrawFee();
+    }
+
+    function test_RevertWhen_NoFeesCollected()
+        external
+        whenTheCallerIsAuthorized
+        givenManagingFees
+        whenWithdrawingCollectedFees
+    {
+        vm.prank(feeAdmin);
+        vm.expectRevert("No fees to withdraw");
+        p2p.withdrawFee();
+    }
+
+    function test_WhenWithdrawerAuthorized()
+        external
+        whenTheCallerIsAuthorized
+        givenManagingFees
+        whenWithdrawingCollectedFees
+    {
+        vm.prank(feeAdmin);
+        p2p.setFee(250); // 2.5% fee
+
+        vm.prank(seller);
+        p2p.createListing(1 ether, "Test");
+        prepFunding(buyer, 1.025 ether); // Price + 2.5% fee
+        vm.prank(buyer);
+        p2p.initiateBuy(0);
+        vm.prank(buyer);
+        p2p.confirmTransaction(0);
+
+        // Test fee withdrawal
+        uint256 feeAdminBalanceBefore = usdc.balanceOf(feeAdmin);
+        vm.prank(feeAdmin);
+        p2p.withdrawFee();
+        assertEq(usdc.balanceOf(feeAdmin), feeAdminBalanceBefore + 0.025 ether);
+    }
+
+    modifier givenManagingExpiry() {
+        vm.prank(seller);
+        p2p.createListing(1 ether, "Test");
+        _;
+    }
+
+    modifier whenCheckingTimeoutStatus() {
+        _;
+    }
+
+    function test_WhenPastDeadline() external whenTheCallerIsAuthorized givenManagingExpiry whenCheckingTimeoutStatus {
+        vm.warp(block.timestamp + 31 days);
+        assertTrue(p2p.isExpired(0));
+    }
+
+    function test_WhenWithinDeadline()
+        external
+        whenTheCallerIsAuthorized
+        givenManagingExpiry
+        whenCheckingTimeoutStatus
+    {
+        assertFalse(p2p.isExpired(0));
+    }
+
+    modifier whenAttemptingRelist() {
+        vm.warp(block.timestamp + 31 days);
+        _;
+    }
+
+    function test_RevertWhen_RelisterNotOwner()
+        external
+        whenTheCallerIsAuthorized
+        givenManagingExpiry
+        whenAttemptingRelist
+    {
+        vm.prank(buyer);
+        vm.expectRevert("Only seller can relist");
+        p2p.relist(0);
+    }
+
+    function test_RevertWhen_ListingStillActive()
+        external
+        whenTheCallerIsAuthorized
+        givenManagingExpiry
+        whenAttemptingRelist
+    {
+        vm.warp(block.timestamp - 31 days); // Make listing active
+        vm.prank(seller);
+        vm.expectRevert("Listing is not expired");
+        p2p.relist(0);
+    }
+
+    function test_WhenRelistParametersValid()
+        external
+        whenTheCallerIsAuthorized
+        givenManagingExpiry
+        whenAttemptingRelist
+    {
+        vm.prank(seller);
+        p2p.relist(0);
+        
+        P2PExchange.Listing memory listing = p2p.getListing(0);
+        assertTrue(listing.expiryTime > block.timestamp);
+        assertEq(uint256(listing.status), uint256(P2PExchange.Status.Listed));
     }
 
     modifier givenFetchingData() {
@@ -268,11 +480,11 @@ contract WhenGivenWhenTest is Test {
         p2p.getListing(999);
     }
 
-    function test_RevertWhen_ListingIdInvalid() 
-        external 
-        whenTheCallerIsAuthorized 
-        givenFetchingData 
-        whenRetrievingListing 
+    function test_RevertWhen_ListingIdInvalid()
+        external
+        whenTheCallerIsAuthorized
+        givenFetchingData
+        whenRetrievingListing
     {
         vm.expectRevert("Invalid listing ID");
         p2p.initiateBuy(999);
@@ -290,23 +502,14 @@ contract WhenGivenWhenTest is Test {
         p2p.getEscrowInfo(999);
     }
 
-    function test_WhenListingIdValid() 
-        external 
-        whenTheCallerIsAuthorized 
-        givenFetchingData 
-        whenRetrievingListing 
-    {
+    function test_WhenListingIdValid() external whenTheCallerIsAuthorized givenFetchingData whenRetrievingListing {
         P2PExchange.Listing memory listing = p2p.getListing(0);
         assertEq(listing.seller, seller);
         assertEq(listing.price, 1 ether);
         assertEq(listing.title, "Test");
     }
 
-    function test_WhenRetrievingAllListings() 
-        external 
-        whenTheCallerIsAuthorized 
-        givenFetchingData 
-    {
+    function test_WhenRetrievingAllListings() external whenTheCallerIsAuthorized givenFetchingData {
         P2PExchange.Listing[] memory listings = p2p.getAllListings();
         assertEq(listings.length, 1);
     }
@@ -336,5 +539,4 @@ contract WhenGivenWhenTest is Test {
         assertEq(escrow.fee, 0);
         assertEq(escrow.isReleased, false);
     }
-
 }

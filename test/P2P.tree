@@ -1,6 +1,17 @@
 WhenGivenWhenTest
-├── When the caller is not an admin
-│   └── it should revert role-based functions
+├── When initializing contract
+│   ├── When USDC address is zero
+│   │   └── it should revert
+│   ├── When dispute handler is zero
+│   │   └── it should revert
+│   ├── When fee admin is zero
+│   │   └── it should revert
+│   ├── When dispute handler equals fee admin
+│   │   └── it should revert
+│   ├── When USDC equals dispute handler
+│   │   └── it should revert
+│   └── When USDC equals fee admin
+│       └── it should revert
 └── When the caller is authorized
     ├── Given creating a listing
     │   ├── When the price is zero
@@ -10,6 +21,8 @@ WhenGivenWhenTest
     │   ├── When the title is blank
     │   │   └── it should revert
     │   ├── When the title exceeds length
+    │   │   └── it should revert
+    │   ├── When the fee calculation overflows
     │   │   └── it should revert
     │   └── When creation parameters are valid
     │       └── it should create listing with expiry time
@@ -31,6 +44,8 @@ WhenGivenWhenTest
     │   │   └── it should revert
     │   ├── When escrow already released
     │   │   └── it should revert
+    │   ├── When confirmation transfer fails
+    │   │   └── it should revert
     │   └── When confirmation parameters valid
     │       └── it should finalize and transfer funds
     ├── Given requesting escrow release
@@ -40,12 +55,16 @@ WhenGivenWhenTest
     │   │   └── it should revert
     │   ├── When escrow state invalid
     │   │   └── it should revert
+    │   ├── When release transfer fails
+    │   │   └── it should revert
     │   └── When release parameters valid
     │       └── it should release funds to seller
     ├── Given handling a dispute
     │   ├── When handler lacks permission
     │   │   └── it should revert
     │   ├── When escrow funds gone
+    │   │   └── it should revert
+    │   ├── When buyer refund fails
     │   │   └── it should revert
     │   ├── When resolving for buyer
     │   │   └── it should return all funds to buyer
@@ -59,6 +78,8 @@ WhenGivenWhenTest
     │   │       └── it should update fee
     │   └── When withdrawing collected fees
     │       ├── When withdrawer unauthorized
+    │       │   └── it should revert
+    │       ├── When no fees collected
     │       │   └── it should revert
     │       └── When withdrawer authorized
     │           └── it should transfer collected fees

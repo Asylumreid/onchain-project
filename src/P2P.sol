@@ -224,6 +224,7 @@ contract P2PExchange is AccessControl {
 
     function withdrawFee() public onlyRole(FEE_ADMIN_ROLE) {
         uint256 amount = collectedFees;
+        require(amount > 0, "No fees to withdraw");
         collectedFees = 0;
         require(usdcToken.transfer(msg.sender, amount), "Fee withdrawal failed");
         emit FeeWithdrawn(amount, msg.sender);
