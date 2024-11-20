@@ -1,69 +1,90 @@
 WhenGivenWhenTest
-├── When the caller is unknown
-│   └── it should revert
-└── When the caller is known
+├── When the caller is not an admin
+│   └── it should revert role-based functions
+└── When the caller is authorized
     ├── Given creating a listing
-    │   ├── When the price is 0
+    │   ├── When the price is zero
     │   │   └── it should revert
-    │   ├── When the title is empty
+    │   ├── When the price exceeds maximum
     │   │   └── it should revert
-    │   └── When the input is valid
-    │       └── it should succeed
+    │   ├── When the title is blank
+    │   │   └── it should revert
+    │   ├── When the title exceeds length
+    │   │   └── it should revert
+    │   └── When creation parameters are valid
+    │       └── it should create listing with expiry time
     ├── Given initiating a buy
-    │   ├── When the allowance is sufficient
-    │   │   └── it should succeed
-    │   ├── When the allowance is insufficient
+    │   ├── When the listing has timed out
     │   │   └── it should revert
-    │   ├── When the buyer is also the seller
+    │   ├── When the listing status is invalid
     │   │   └── it should revert
-    │   └── When the listing is already purchased
-    │       └── it should revert
-    ├── Given updating the status
-    │   ├── When the seller updates the status
-    │   │   ├── When updating to shipped
-    │   │   │   └── it should succeed
-    │   │   └── When updating to received as seller
-    │   │       └── it should revert
-    │   ├── When the buyer updates the status
-    │   │   ├── When updating to received
-    │   │   │   └── it should succeed
-    │   │   └── When updating to shipped as buyer
-    │   │       └── it should revert
-    │   └── When the caller is unauthorized
-    │       └── it should revert
-    ├── Given marking a dispute
-    │   ├── When the caller is the buyer
-    │   │   └── it should succeed if allowed
-    │   ├── When the caller is the seller
-    │   │   └── it should succeed if allowed
-    │   └── When the status does not allow disputes
-    │       └── it should revert
-    ├── Given handling a dispute
-    │   ├── When the handler is unauthorized
+    │   ├── When the buyer matches seller
     │   │   └── it should revert
-    │   ├── When the handler resolves to refund the buyer
-    │   │   └── it should refund the buyer and transfer the fee
-    │   ├── When the handler resolves to pay the seller
-    │   │   └── it should pay the seller and transfer the fee
-    │   └── When the fee collection is insufficient
-    │       └── it should revert
+    │   ├── When the payment fails
+    │   │   └── it should revert
+    │   └── When purchase parameters are valid
+    │       └── it should lock funds in escrow
     ├── Given confirming a transaction
-    │   ├── When the shipment is completed
-    │   │   └── it should succeed
-    │   └── When the shipment is not completed
-    │       └── it should revert
-    ├── Given withdrawing funds
-    │   ├── When the transaction is completed
-    │   │   └── it should succeed
-    │   └── When the transaction is incomplete
-    │       └── it should revert
-    ├── Given cancelling a listing
-    │   ├── When the listing is valid
-    │   │   └── it should succeed
-    │   └── When the listing is invalid
-    │       └── it should revert
-    └── Given fetching a listing
-        ├── When the listing exists
-        │   └── it should return the correct listing
-        └── When the listing does not exist
-            └── it should revert
+    │   ├── When confirmer is not buyer
+    │   │   └── it should revert
+    │   ├── When transaction state invalid
+    │   │   └── it should revert
+    │   ├── When escrow already released
+    │   │   └── it should revert
+    │   └── When confirmation parameters valid
+    │       └── it should finalize and transfer funds
+    ├── Given requesting escrow release
+    │   ├── When requester is not seller
+    │   │   └── it should revert
+    │   ├── When escrow period incomplete
+    │   │   └── it should revert
+    │   ├── When escrow state invalid
+    │   │   └── it should revert
+    │   └── When release parameters valid
+    │       └── it should release funds to seller
+    ├── Given handling a dispute
+    │   ├── When handler lacks permission
+    │   │   └── it should revert
+    │   ├── When escrow funds gone
+    │   │   └── it should revert
+    │   ├── When resolving for buyer
+    │   │   └── it should return all funds to buyer
+    │   └── When resolving for seller
+    │       └── it should pay seller and collect fee
+    ├── Given managing fees
+    │   ├── When setting fee rate
+    │   │   ├── When setter unauthorized
+    │   │   │   └── it should revert
+    │   │   └── When setter authorized
+    │   │       └── it should update fee
+    │   └── When withdrawing collected fees
+    │       ├── When withdrawer unauthorized
+    │       │   └── it should revert
+    │       └── When withdrawer authorized
+    │           └── it should transfer collected fees
+    ├── Given managing expiry
+    │   ├── When checking timeout status
+    │   │   ├── When past deadline
+    │   │   │   └── it should return true
+    │   │   └── When within deadline
+    │   │       └── it should return false
+    │   └── When attempting relist
+    │       ├── When relister not owner
+    │       │   └── it should revert
+    │       ├── When listing still active
+    │       │   └── it should revert
+    │       └── When relist parameters valid
+    │           └── it should update expiry and recalculate fee
+    └── Given fetching data
+        ├── When retrieving listing
+        │   ├── When listing id invalid
+        │   │   └── it should revert
+        │   └── When listing id valid
+        │       └── it should return listing with current status
+        ├── When retrieving all listings
+        │   └── it should return complete listing array
+        └── When retrieving escrow details
+            ├── When escrow id invalid
+            │   └── it should revert
+            └── When escrow id valid
+                └── it should return escrow details
