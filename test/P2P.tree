@@ -1,4 +1,4 @@
-WhenGivenWhenTest
+P2PExchangeTest
 ├── When initializing contract
 │   ├── When USDC address is zero
 │   │   └── it should revert
@@ -11,6 +11,11 @@ WhenGivenWhenTest
 │   ├── When USDC equals dispute handler
 │   │   └── it should revert
 │   └── When USDC equals fee admin
+│       └── it should revert
+├── When handling token operations
+│   ├── When balance insufficient
+│   │   └── it should revert
+│   └── When allowance insufficient
 │       └── it should revert
 └── When the caller is authorized
     ├── Given creating a listing
@@ -76,6 +81,8 @@ WhenGivenWhenTest
     │   │   │   └── it should revert
     │   │   └── When setter authorized
     │   │       └── it should update fee
+    │   ├── When checking collected fees
+    │   │   └── it should return correct amount
     │   └── When withdrawing collected fees
     │       ├── When withdrawer unauthorized
     │       │   └── it should revert
@@ -97,6 +104,11 @@ WhenGivenWhenTest
     │       └── When relist parameters valid
     │           └── it should update expiry and recalculate fee
     └── Given fetching data
+        ├── When checking listing count
+        │   ├── When no listings exist
+        │   │   └── it should return zero
+        │   └── When listings exist
+        │       └── it should return count
         ├── When retrieving listing
         │   ├── When listing id invalid
         │   │   └── it should revert
