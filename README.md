@@ -1,6 +1,3 @@
-Here's a README for your P2P Exchange project:
-
-```markdown
 # P2P Exchange Smart Contract
 
 A decentralized peer-to-peer exchange platform built on Solidity, enabling secure trading with USDC and escrow functionality.
